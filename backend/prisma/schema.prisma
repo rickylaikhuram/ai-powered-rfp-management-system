@@ -1,0 +1,146 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Vendors that can receive RFPs
+model Vendor {
+  id          String   @id @default(uuid())
+  name        String
+  email       String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  proposals  Proposal[]
+  rfpVendors RFPVendor[]
+}
+
+// RFP created by user
+model RFP {
+  id          String @id @default(uuid())
+  title       String
+  description String @db.Text
+
+  // Structured data extracted by AI
+  budget       Float?
+  deliveryDays Int?
+  quantity     Int?
+  requirements Json? // Store structured requirements as JSON
+
+  status RFPStatus @default(DRAFT)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  sentAt    DateTime? // When RFP was sent to vendors
+
+  rfpVendors   RFPVendor[]
+  proposals    Proposal[]
+  chatMessages ChatMessage[]
+}
+
+enum RFPStatus {
+  DRAFT
+  SENT
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// Junction table for RFP and Vendors (many-to-many)
+model RFPVendor {
+  id       String   @id @default(uuid())
+  rfpId    String
+  vendorId String
+  sentAt   DateTime @default(now())
+
+  rfp    RFP    @relation(fields: [rfpId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  @@unique([rfpId, vendorId])
+}
+
+// Vendor proposal/response to an RFP
+model Proposal {
+  id       String @id @default(uuid())
+  rfpId    String
+  vendorId String
+
+  // Parsed data from email
+  price        Float?
+  deliveryDays Int?
+  warranty     String?
+  paymentTerms String?
+  notes        String? @db.Text
+
+  // Raw email data
+  rawEmailBody String  @db.Text
+  emailSubject String?
+  emailFrom    String?
+
+  // AI evaluation
+  aiSummary        String? @db.Text
+  aiScore          Float?
+
+  status ProposalStatus @default(RECEIVED)
+
+  rfp    RFP    @relation(fields: [rfpId], references: [id], onDelete: Cascade)
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+
+  attachments ProposalAttachment[]
+
+  receivedAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([rfpId, vendorId])
+}
+
+enum ProposalStatus {
+  RECEIVED
+  REVIEWED
+  ACCEPTED
+  REJECTED
+}
+
+// Attachments from vendor emails (PDFs, etc.)
+model ProposalAttachment {
+  id         String @id @default(uuid())
+  proposalId String
+  filename   String
+  fileUrl    String 
+  fileSize   Int
+  mimeType   String
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+// Chat messages for the conversational interface
+model ChatMessage {
+  id       String      @id @default(uuid())
+  rfpId    String?
+  role     MessageRole
+  content  String      @db.Text
+  metadata Json? // Store additional data like buttons, cards, etc.
+
+  rfp RFP? @relation(fields: [rfpId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
