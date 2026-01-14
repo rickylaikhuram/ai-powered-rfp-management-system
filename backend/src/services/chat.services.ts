@@ -39,6 +39,7 @@ export interface RFP {
   title: string;
   description: string;
   createdAt: Date;
+  status: string;
 }
 
 export const getRfp = async (sessionId: string): Promise<RFP | null> => {
@@ -52,6 +53,7 @@ export const getRfp = async (sessionId: string): Promise<RFP | null> => {
             title: true,
             description: true,
             createdAt: true,
+            status: true,
           },
         },
       },

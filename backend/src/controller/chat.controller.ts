@@ -8,6 +8,7 @@ import {
   RFP,
 } from "../services/chat.services";
 import { UpdateData } from "../types/chat";
+import { sendRfp } from "../services/email.services";
 
 export const getPreviousChat = async (req: Request, res: Response) => {
   try {
@@ -22,6 +23,7 @@ export const getPreviousChat = async (req: Request, res: Response) => {
             title: true,
             description: true,
             createdAt: true,
+            status: true,
           },
         },
         messages: {
@@ -212,56 +214,88 @@ export const chatHistory = async (req: Request, res: Response) => {
 
 export const finalizedRfp = async (req: Request, res: Response) => {
   try {
-    let { sessionId, isChange, title, description } = req.body;
+    let { sessionId, isChanged, title, description, vendorIds } = req.body;
 
-    const isValid = await prisma.chatSession.findUnique({
+    // 1. Basic Session Validation
+    const session = await prisma.chatSession.findUnique({
       where: { id: sessionId },
-      select: {
-        rfpId: true,
+      include: { rfp: true },
+    });
+
+    if (!session || !session.rfpId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid session" });
+    }
+
+    // 2. VENDOR CHECK: Validate that ALL provided vendor IDs exist in DB
+    const existingVendors = await prisma.vendor.findMany({
+      where: {
+        id: { in: vendorIds },
       },
     });
 
-    if (!isValid || !isValid.rfpId) {
-      return res.status(400).json({
+    if (existingVendors.length !== vendorIds.length) {
+      return res.status(404).json({
         success: false,
-        message: "not a valid session id / doesn't have rfpid",
+        message: `Some vendors were not found}`,
       });
     }
 
-    const updateData: UpdateData = {
-      status: "COMPLETED",
-    };
+    // 3. Update RFP and Create Junction Records using a transaction
+    const rfpUpdated = await prisma.$transaction(async (tx) => {
+      // A. Update the RFP status
+      const updated = await tx.rFP.update({
+        where: { id: session.rfpId! },
+        data: {
+          status: "SENT",
+          sentAt: new Date(),
+          title: isChanged ? title : undefined,
+          description: isChanged ? description : undefined,
+          // B. Map RFP to Vendors in junction table
+          rfpVendors: {
+            create: vendorIds.map((vId: string) => ({
+              vendor: { connect: { id: vId } },
+            })),
+          },
+        },
+      });
+      return updated;
+    });
 
-    if (isChange) {
-      updateData.title = title;
-      updateData.description = description;
+    // 4. Send Emails (using the validated list)
+    let emailSummaryList = "";
+    for (const vendor of existingVendors) {
+      const trackingFooter = `\n\n--- SYSTEM INFO ---\nRef: [RFP:${rfpUpdated.id}][VND:${vendor.id}]`;
+      const emailText = `${rfpUpdated.description}${trackingFooter}`;
+
+      await sendRfp(vendor.email, `New RFP: ${rfpUpdated.title}`, emailText);
+      emailSummaryList += `• ${vendor.name} (${vendor.email})\n`;
     }
 
-    const rfpUpdated = await prisma.rFP.update({
-      where: {
-        id: isValid.rfpId,
+    // 5. Save System Message to Chat
+    const systemMsg = `RFP finalized and sent to:\n${emailSummaryList}`;
+    await prisma.chatMessage.create({
+      data: {
+        chatSessionId: sessionId,
+        role: "SYSTEM",
+        content: systemMsg,
       },
-      data: updateData,
     });
 
-    return res.status(200).json({
-      success: true,
-      rfp: rfpUpdated,
-      sessionId,
-    });
+    return res.status(200).json({ success: true, rfp: rfpUpdated });
   } catch (error) {
-    console.error("Error in finalized rfp:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
+    console.error("Finalize Error:", error);
+    return res
+      .status(500)
+      .json({ success: false, message: "Failed to finalize RFP" });
   }
 };
 
 // get vendors
 export const getVendors = async (req: Request, res: Response) => {
   try {
-    const vedors = await prisma.vendor.findMany({
+    const vendors = await prisma.vendor.findMany({
       select: {
         id: true,
         name: true,
@@ -271,7 +305,7 @@ export const getVendors = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      vedors: vedors ?? [],
+      vendors: vendors ?? [],
     });
   } catch (error) {
     console.error("Error in get vendors:", error);
