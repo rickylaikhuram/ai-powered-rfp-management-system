@@ -15,11 +15,11 @@ datasource db {
 
 // Vendors that can receive RFPs
 model Vendor {
-  id          String   @id @default(uuid())
-  name        String
-  email       String   @unique
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   proposals  Proposal[]
   rfpVendors RFPVendor[]
@@ -31,21 +31,15 @@ model RFP {
   title       String
   description String @db.Text
 
-  // Structured data extracted by AI
-  budget       Float?
-  deliveryDays Int?
-  quantity     Int?
-  requirements Json? // Store structured requirements as JSON
-
   status RFPStatus @default(DRAFT)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   sentAt    DateTime? // When RFP was sent to vendors
 
-  rfpVendors   RFPVendor[]
-  proposals    Proposal[]
-  chatMessages ChatMessage[]
+  rfpVendors  RFPVendor[]
+  proposals   Proposal[]
+  chatSession ChatSession?
 }
 
 enum RFPStatus {
@@ -88,8 +82,8 @@ model Proposal {
   emailFrom    String?
 
   // AI evaluation
-  aiSummary        String? @db.Text
-  aiScore          Float?
+  aiSummary String? @db.Text
+  aiScore   Float?
 
   status ProposalStatus @default(RECEIVED)
 
@@ -117,7 +111,7 @@ model ProposalAttachment {
   id         String @id @default(uuid())
   proposalId String
   filename   String
-  fileUrl    String 
+  fileUrl    String
   fileSize   Int
   mimeType   String
 
@@ -126,15 +120,24 @@ model ProposalAttachment {
   createdAt DateTime @default(now())
 }
 
+model ChatSession {
+  id        String        @id @default(uuid())
+  createdAt DateTime      @default(now())
+  messages  ChatMessage[]
+  rfpId     String?       @unique // Link it once the RFP is born
+  rfp       RFP?          @relation(fields: [rfpId], references: [id])
+}
+
 // Chat messages for the conversational interface
 model ChatMessage {
-  id       String      @id @default(uuid())
-  rfpId    String?
-  role     MessageRole
-  content  String      @db.Text
-  metadata Json? // Store additional data like buttons, cards, etc.
+  id            String      @id @default(uuid())
+  chatSessionId String
+  chatSession   ChatSession @relation(fields: [chatSessionId], references: [id])
 
-  rfp RFP? @relation(fields: [rfpId], references: [id], onDelete: Cascade)
+  role    MessageRole
+  content String      @db.Text
+
+  isRfp Boolean @default(false)
 
   createdAt DateTime @default(now())
 }

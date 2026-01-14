@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "types": ["node"],
     "target": "es6",
     "module": "commonjs",
     "moduleResolution": "node",
@@ -7,13 +8,8 @@
     "strict": true,
     "esModuleInterop": true,
     "noImplicitAny": true,
-    "outDir": "./dist",
-    "rootDir": "./src"
+    "outDir": "./dist"
   },
-  "include": [
-    "src/**/*"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["src/**/*", "prisma.config.ts"],
+  "exclude": ["node_modules"]
 }

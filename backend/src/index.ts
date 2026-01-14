@@ -1,8 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import chat from "./routes/chat";
-import "./jobs/cronjob.services";
+import rfp from "./routes/rfp";
 
 dotenv.config();
 
@@ -14,7 +13,7 @@ app.use(express.json());
 app.use(cors());
 
 // Check if user is logged in
-app.use("/api/chat", chat);
+app.use("/api/rfp", rfp);
 
 
 app.get("/health", (req, res) => {
