@@ -16,6 +16,7 @@ interface RfpData {
   title: string;
   description: string;
   createdAt: Date;
+  status: string;
 }
 
 const Chat = () => {
@@ -29,6 +30,7 @@ const Chat = () => {
   const [isFetchingHistory, setIsFetchingHistory] = useState(false);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [rfpData, setRfpData] = useState<RfpData | null>(null);
+  const [emailSent, setEmailSent] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -46,6 +48,7 @@ const Chat = () => {
       setIsLoading(false);
       setShowScrollButton(false);
       setRfpData(null);
+      setEmailSent(false);
     }
   }, [id]);
 
@@ -59,6 +62,14 @@ const Chat = () => {
         // Check if there's RFP data in the history
         if (response.data.rfp) {
           setRfpData(response.data.rfp);
+          console.log(response.data.rfp);
+          if (
+            response.data.rfp.status === "SENT" ||
+            response.data.rfp.status === "IN_PROGRESS" ||
+            response.data.rfp.status === "CANCELLED"
+          ) {
+            setEmailSent(true);
+          }
         } else {
           setRfpData(null);
         }
@@ -69,7 +80,7 @@ const Chat = () => {
 
       // If session doesn't exist, redirect to new
       if (error.response?.status === 404) {
-        navigate("/rfp/chat/new", { replace: true });
+        navigate("/new", { replace: true });
       }
     } finally {
       setIsFetchingHistory(false);
@@ -95,19 +106,17 @@ const Chat = () => {
         sessionId: sessionId,
         data: input.trim(),
       });
-
       // If this was a new chat, update the URL and sessionId
       if (!sessionId && response.data.sessionId) {
         const newSessionId = response.data.sessionId;
         setSessionId(newSessionId);
-        navigate(`/rfp/chat/${newSessionId}`, { replace: true });
+        navigate(`/${newSessionId}`, { replace: true });
       }
-
       // Add AI response
       const aiMessage: Message = {
         role: "ASSISTANT",
-        content: response.data.message?.content,
-        createdAt: response.data.message?.createdAt || new Date(),
+        content: response.data.message,
+        createdAt: new Date(),
         isRfp: response.data.isRfp || false,
       };
 
@@ -174,6 +183,7 @@ const Chat = () => {
   };
 
   const handleRfpFinalized = () => {
+    setEmailSent(true);
     // Optional: Add any post-finalization logic here
     console.log("RFP finalized successfully");
   };
@@ -228,7 +238,7 @@ const Chat = () => {
                     }`}
                   >
                     <p className="text-xs font-medium text-gray-400 mb-1 px-1">
-                      {message.role === "USER" ? "You" : "Assistant"}
+                      {message.role}
                     </p>
                     <div
                       className={`inline-block px-4 py-3 rounded-lg ${
@@ -270,14 +280,14 @@ const Chat = () => {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Describe your procurement needs..."
-              disabled={isLoading}
+              disabled={emailSent || isLoading}
               rows={1}
               className="flex-1 resize-none border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white disabled:bg-gray-800 disabled:cursor-not-allowed placeholder-gray-400"
               style={{ minHeight: "50px", maxHeight: "150px" }}
             />
             <button
               onClick={handleSend}
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isLoading || emailSent}
               className="bg-blue-600 text-white rounded-lg px-6 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
             >
               {isLoading ? (
@@ -294,6 +304,7 @@ const Chat = () => {
       {rfpData && (
         <div className="w-1/2">
           <RfpPreview
+            emailSent={emailSent}
             rfpData={rfpData}
             sessionId={sessionId}
             onFinalized={handleRfpFinalized}
