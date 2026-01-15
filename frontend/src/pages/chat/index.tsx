@@ -1,15 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Send, Loader2, ArrowDown } from "lucide-react";
+import { Send, Loader2, ArrowDown, Recycle, Check } from "lucide-react";
 import instance from "../../lib/axios";
 import RfpPreview from "../../components/RfpPreview";
-
-interface Message {
-  role: string;
-  content: string;
-  createdAt: Date;
-  isRfp?: boolean;
-}
+import ChatMessages from "../../components/ChatMessage";
+import type { Message } from "../../types/chat";
 
 interface RfpData {
   id: string;
@@ -31,6 +26,8 @@ const Chat = () => {
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [rfpData, setRfpData] = useState<RfpData | null>(null);
   const [emailSent, setEmailSent] = useState(false);
+  const [hasProposals, setHasProposals] = useState(false);
+  const [isComparing, setIsComparing] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -49,6 +46,7 @@ const Chat = () => {
       setShowScrollButton(false);
       setRfpData(null);
       setEmailSent(false);
+      setHasProposals(false);
     }
   }, [id]);
 
@@ -59,19 +57,34 @@ const Chat = () => {
 
       if (response.data.success) {
         setMessages(response.data.messages);
+
         // Check if there's RFP data in the history
         if (response.data.rfp) {
           setRfpData(response.data.rfp);
           console.log(response.data.rfp);
+
           if (
             response.data.rfp.status === "SENT" ||
             response.data.rfp.status === "IN_PROGRESS" ||
             response.data.rfp.status === "CANCELLED"
           ) {
             setEmailSent(true);
+          } else {
+            setEmailSent(false);
+          }
+
+          // Check if proposals exist
+          if (
+            response.data.rfp.proposals &&
+            response.data.rfp.proposals.length > 0
+          ) {
+            setHasProposals(true);
+          } else {
+            setHasProposals(false);
           }
         } else {
           setRfpData(null);
+          setHasProposals(false);
         }
         setTimeout(() => scrollToBottom(true), 100);
       }
@@ -106,16 +119,18 @@ const Chat = () => {
         sessionId: sessionId,
         data: input.trim(),
       });
+
       // If this was a new chat, update the URL and sessionId
       if (!sessionId && response.data.sessionId) {
         const newSessionId = response.data.sessionId;
         setSessionId(newSessionId);
         navigate(`/${newSessionId}`, { replace: true });
       }
+
       // Add AI response
       const aiMessage: Message = {
         role: "ASSISTANT",
-        content: response.data.message,
+        content: response.data.message.content,
         createdAt: new Date(),
         isRfp: response.data.isRfp || false,
       };
@@ -137,6 +152,34 @@ const Chat = () => {
       setInput(userMessage.content); // Restore input
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleCompare = async () => {
+    if (!sessionId || isComparing) return;
+
+    setIsComparing(true);
+    try {
+      const response = await instance.post("/proposal/compare", {
+        sessionId: sessionId,
+      });
+
+      if (response.data.success) {
+        // Add the comparison message to the chat
+        const comparisonMessage: Message = {
+          role: "ASSISTANT",
+          content: response.data.message.content,
+          createdAt: new Date(response.data.message.createdAt),
+          isRfp: false,
+        };
+
+        setMessages((prev) => [...prev, comparisonMessage]);
+        checkAndScroll();
+      }
+    } catch (error) {
+      console.error("Error comparing proposals:", error);
+    } finally {
+      setIsComparing(false);
     }
   };
 
@@ -184,13 +227,30 @@ const Chat = () => {
 
   const handleRfpFinalized = () => {
     setEmailSent(true);
-    // Optional: Add any post-finalization logic here
-    console.log("RFP finalized successfully");
+    if (sessionId) {
+      fetchChatHistory(sessionId);
+    }
+  };
+
+  const handleSync = async () => {
+    if (!sessionId) return;
+
+    try {
+      // First, call this endpoint to sync the mail from the mail account
+      const response = await instance.get(`/proposal/mails/${sessionId}`);
+      if (response.data.proposalExists) {
+        setHasProposals(true);
+      }
+      // Then fetch the chat history to update the state
+      await fetchChatHistory(sessionId);
+    } catch (error) {
+      console.error("Error syncing:", error);
+    }
   };
 
   if (isFetchingHistory) {
     return (
-      <div className="flex items-center justify-center h-screen bg-gray-50">
+      <div className="flex items-center justify-center h-screen bg-gray-900">
         <Loader2 className="w-8 h-8 animate-spin text-gray-600" />
       </div>
     );
@@ -205,8 +265,17 @@ const Chat = () => {
         } transition-all duration-300`}
       >
         {/* Header */}
-        <div className="bg-gray-800 border-b border-gray-700 px-6 py-4">
+        <div className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
           <h1 className="text-xl font-semibold text-white">RFP Assistant</h1>
+          {emailSent && (
+            <button
+              onClick={handleSync}
+              className="flex items-center gap-2 px-3 py-1 rounded-lg bg-teal-700 hover:bg-teal-600 text-white transition-colors cursor-pointer"
+            >
+              <Recycle className="w-4 h-4" />
+              <span>Sync</span>
+            </button>
+          )}
         </div>
 
         {/* Messages Container */}
@@ -220,43 +289,7 @@ const Chat = () => {
               <p>Start a conversation to create your RFP</p>
             </div>
           ) : (
-            messages.map((message, index) => (
-              <div
-                key={index}
-                className={`flex ${
-                  message.role === "USER" ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`max-w-3xl w-full ${
-                    message.role === "USER" ? "flex justify-end" : ""
-                  }`}
-                >
-                  <div
-                    className={`${
-                      message.role === "USER" ? "text-right" : "text-left"
-                    }`}
-                  >
-                    <p className="text-xs font-medium text-gray-400 mb-1 px-1">
-                      {message.role}
-                    </p>
-                    <div
-                      className={`inline-block px-4 py-3 rounded-lg ${
-                        message.role === "USER"
-                          ? "bg-blue-600 text-white"
-                          : message.isRfp
-                          ? "bg-gray-800 border border-gray-700 text-gray-100"
-                          : "bg-gray-800 border border-gray-700 text-gray-100"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap break-words">
-                        {message.content}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
+            <ChatMessages messages={messages} />
           )}
           <div ref={messagesEndRef} />
         </div>
@@ -274,29 +307,57 @@ const Chat = () => {
 
         {/* Input Area */}
         <div className="bg-gray-800 border-t border-gray-700 px-6 py-4">
-          <div className="max-w-4xl mx-auto flex gap-3">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="Describe your procurement needs..."
-              disabled={emailSent || isLoading}
-              rows={1}
-              className="flex-1 resize-none border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white disabled:bg-gray-800 disabled:cursor-not-allowed placeholder-gray-400"
-              style={{ minHeight: "50px", maxHeight: "150px" }}
-            />
+          {emailSent ? (
             <button
-              onClick={handleSend}
-              disabled={!input.trim() || isLoading || emailSent}
-              className="bg-blue-600 text-white rounded-lg px-6 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              onClick={handleCompare}
+              disabled={!hasProposals || isComparing}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
             >
-              {isLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+              {isComparing ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Comparing...</span>
+                </>
               ) : (
-                <Send className="w-5 h-5" />
+                <>
+                  <Check className="w-5 h-5" />
+                  <span>
+                    {!hasProposals
+                      ? "No Proposals To Compare"
+                      : "Compare Proposals"}
+                  </span>
+                </>
               )}
             </button>
-          </div>
+          ) : (
+            <div className="max-w-4xl mx-auto flex gap-3">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder={
+                  rfpData
+                    ? "Ask ai to fix rfp..."
+                    : "Describe your procurement needs..."
+                }
+                disabled={emailSent || isLoading}
+                rows={1}
+                className="flex-1 resize-none border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white disabled:bg-gray-800 disabled:cursor-not-allowed placeholder-gray-400"
+                style={{ minHeight: "50px", maxHeight: "150px" }}
+              />
+              <button
+                onClick={handleSend}
+                disabled={!input.trim() || isLoading || emailSent}
+                className="bg-blue-600 text-white rounded-lg px-6 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed transition-colors flex items-center justify-center"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -308,6 +369,7 @@ const Chat = () => {
             rfpData={rfpData}
             sessionId={sessionId}
             onFinalized={handleRfpFinalized}
+            hasProposals={hasProposals}
           />
         </div>
       )}

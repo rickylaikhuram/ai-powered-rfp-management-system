@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
-import { Mail, Edit2, Check, Loader2 } from "lucide-react";
+import { Mail, Edit2, Check, Loader2, Inbox } from "lucide-react";
 import instance from "../lib/axios";
 import VendorSelectionModal from "./VendorSelectionModal";
+import ProposalListModal from "./ProposalListModal";
 
 interface RfpData {
   id: string;
@@ -15,6 +16,7 @@ interface RfpPreviewProps {
   rfpData: RfpData;
   sessionId: string | null;
   onFinalized?: () => void;
+  hasProposals: boolean;
 }
 
 const RfpPreview: React.FC<RfpPreviewProps> = ({
@@ -22,6 +24,7 @@ const RfpPreview: React.FC<RfpPreviewProps> = ({
   rfpData,
   sessionId,
   onFinalized,
+  hasProposals,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(rfpData.title);
@@ -29,6 +32,7 @@ const RfpPreview: React.FC<RfpPreviewProps> = ({
   const [isChanged, setIsChanged] = useState(false);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [showVendorModal, setShowVendorModal] = useState(false);
+  const [showProposalModal, setShowProposalModal] = useState(false);
 
   useEffect(() => {
     setTitle(rfpData.title);
@@ -81,6 +85,10 @@ const RfpPreview: React.FC<RfpPreviewProps> = ({
     } finally {
       setIsFinalizing(false);
     }
+  };
+
+  const handleViewProposals = () => {
+    setShowProposalModal(true);
   };
 
   return (
@@ -165,25 +173,37 @@ const RfpPreview: React.FC<RfpPreviewProps> = ({
           )}
         </div>
 
-        {/* Finalize Button */}
+        {/* Finalize/View Proposals Button */}
         <div className="bg-gray-800 border-t border-gray-700 px-6 py-4">
-          <button
-            onClick={handleFinalizeClick}
-            disabled={isFinalizing || emailSent}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
-          >
-            {isFinalizing ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>Finalizing...</span>
-              </>
-            ) : (
-              <>
-                <Check className="w-5 h-5" />
-                <span>{emailSent ? "Waiting for reply" : "Finalize RFP"}</span>
-              </>
-            )}
-          </button>
+          {emailSent ? (
+            <button
+              onClick={handleViewProposals}
+              className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <Inbox className="w-5 h-5" />
+              <span>
+                {hasProposals ? "View Proposals" : "Waiting for Proposals"}
+              </span>
+            </button>
+          ) : (
+            <button
+              onClick={handleFinalizeClick}
+              disabled={isFinalizing}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              {isFinalizing ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span>Finalizing...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-5 h-5" />
+                  <span>Finalize RFP</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -193,6 +213,13 @@ const RfpPreview: React.FC<RfpPreviewProps> = ({
         onClose={() => setShowVendorModal(false)}
         onSend={handleSendToVendors}
         isSending={isFinalizing}
+      />
+
+      {/* Proposal List Modal */}
+      <ProposalListModal
+        isOpen={showProposalModal}
+        onClose={() => setShowProposalModal(false)}
+        sessionId={sessionId}
       />
     </>
   );
