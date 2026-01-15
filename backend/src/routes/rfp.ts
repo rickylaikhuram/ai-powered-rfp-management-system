@@ -14,7 +14,7 @@ import {
 
 const router = Router();
 
-// get chat history
+// get all chat history some field only
 router.get("/history", chatHistory);
 
 // get chat history for a particular sessionid

@@ -124,11 +124,11 @@ const ProposalDetailModal: React.FC<ProposalDetailModalProps> = ({
                           <div className="bg-gray-700 rounded-full h-2 w-32">
                             <div
                               className="bg-blue-500 h-2 rounded-full transition-all"
-                              style={{ width: `${proposal.aiScore}%` }}
+                              style={{ width: `${proposal.aiScore * 100}%` }}
                             />
                           </div>
                           <span className="text-white font-semibold">
-                            {proposal.aiScore}/100
+                            {proposal.aiScore * 100}/100
                           </span>
                         </div>
                       </div>

@@ -68,15 +68,3 @@ export const getRfp = async (sessionId: string): Promise<RFP | null> => {
   }
 };
 
-export const checkSession = async (sessionId: string) => {
-  try {
-    const chatSession = await prisma.chatSession.findUnique({
-      where: { id: sessionId },
-    });
-
-    return !!chatSession;
-  } catch (error) {
-    console.error("Error checking session:", error);
-    return false;
-  }
-};
