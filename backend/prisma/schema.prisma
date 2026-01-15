@@ -111,8 +111,6 @@ model ProposalAttachment {
   id         String @id @default(uuid())
   proposalId String
   filename   String
-  fileUrl    String
-  fileSize   Int
   mimeType   String
 
   proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)

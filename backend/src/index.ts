@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import rfp from "./routes/rfp";
+import proposal from "./routes/proposal";
 
 dotenv.config();
 
@@ -14,7 +15,7 @@ app.use(cors());
 
 // Check if user is logged in
 app.use("/api/rfp", rfp);
-
+app.use("/api/proposal", proposal);
 
 app.get("/health", (req, res) => {
   res.status(200).send("Backend service healthy - " + new Date().toISOString());

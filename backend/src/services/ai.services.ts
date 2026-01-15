@@ -20,7 +20,6 @@ export const processRfpWithGemini = async (
     model: "gemini-2.5-flash",
     generationConfig: {
       responseMimeType: "application/json",
-      temperature: 0.1, // Lower temperature for more consistent results
     },
   });
 
@@ -72,6 +71,9 @@ export const processRfpWithGemini = async (
     IF IT'S AN RFP (set isRfp: true):
     - Generate a professional email subject for vendors
     - Create a detailed RFP email body including all gathered information
+    - IMPORTANT FORMATTING RULE:
+      The emailSubject and emailBody MUST be plain text only.
+      Do NOT use bold text, asterisks (*).
     
     IF IT'S NOT AN RFP (set isRfp: false):
     - Provide helpful guidance in the "reason" field
@@ -106,4 +108,114 @@ export const processRfpWithGemini = async (
         "I need more details about your procurement needs. What are you looking to purchase, and what are your requirements?",
     };
   }
+};
+
+// Service to parse vendor replies (email + PDF) into structured Proposal data
+export const extractProposalDataWithAI = async (
+  emailBody: string,
+  pdfText: string,
+  rfpContext: { title: string; description: string }
+) => {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: {
+      responseMimeType: "application/json",
+    },
+  });
+
+  const prompt = `
+    CONTEXT:
+    You are an expert procurement analyst. A vendor has replied to the following RFP:
+    RFP Title: "${rfpContext.title}"
+    RFP Original Requirements: "${rfpContext.description}"
+
+    VENDOR DATA TO ANALYZE:
+    1. Email Reply Body: "${emailBody}"
+    2. Text Extracted from PDF Attachment: "${pdfText}"
+
+    TASK:
+    Extract the specific bid details from the vendor's data. If information is missing, use null for numbers or null for strings.
+
+    EXTRACTION RULES:
+    - price: Extract the total numeric bid amount (e.g., 50000). Remove currency symbols.
+    - deliveryDays: Extract the delivery timeline in total number of days.
+    - warranty: Summary of warranty offered (e.g., "1 year manufacturer").
+    - paymentTerms: Any mentioned terms (e.g., "Net 30").
+    - aiSummary: A 2-sentence professional summary of this vendor's offer.
+    - aiScore: Rate the proposal from 0 to 1 based on how well it meets the RFP requirements.
+
+    RESPONSE FORMAT (JSON ONLY):
+    {
+      "price": number | null,
+      "deliveryDays": number | null,
+      "warranty": string | null,
+      "paymentTerms": string | null,
+      "notes": string | null,
+      "aiSummary": string | null,
+      "aiScore": number
+    }
+  `;
+
+  try {
+    const result = await model.generateContent(prompt);
+    const responseText = result.response.text();
+    const cleanText = responseText.replace(/```json\n?|\n?```/g, "").trim();
+
+    return JSON.parse(cleanText);
+  } catch (error) {
+    console.error("Error extracting proposal with Gemini:", error);
+    // Return a safe default so the polling doesn't crash
+    return {
+      price: null,
+      deliveryDays: null,
+      warranty: null,
+      paymentTerms: null,
+      notes: "Error during AI extraction.",
+      aiSummary: "Could not summarize proposal.",
+      aiScore: 0,
+    };
+  }
+};
+
+// Service to compare vendor proposal and recommend which one to choose
+export const compareProposalsWithAI = async (context: any) => {
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    generationConfig: { responseMimeType: "application/json" },
+  });
+
+  const prompt = `
+    You are a Senior Procurement Manager. Compare the following vendor proposals against the RFP requirements.
+    
+    RFP TITLE: ${context.rfpTitle}
+    RFP REQUIREMENTS: ${context.rfpDescription}
+    
+    PROPOSALS TO EVALUATE:
+    ${JSON.stringify(context.vendorBids, null, 2)}
+    
+    TASK:
+    1. Rank the vendors from best to worst.
+    2. Provide a "Verdict" for the winner (why they won).
+    3. Identify any risks for each vendor (e.g., too expensive, delivery too slow).
+    
+    RESPONSE FORMAT (JSON ONLY):
+    {
+      "winner": {
+        "name": string,
+        "reason": string
+      },
+      "comparisonSummary": string,
+      "rankings": [
+        { "vendorName": "string", "rank": 1, "pros": ["string"], "cons": ["string"] }
+      ]
+    }
+  `;
+
+  const result = await model.generateContent(prompt);
+  return JSON.parse(
+    result.response
+      .text()
+      .replace(/```json\n?|\n?```/g, "")
+      .trim()
+  );
 };

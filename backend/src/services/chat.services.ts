@@ -1,4 +1,6 @@
+import { fa } from "zod/v4/locales";
 import { prisma } from "../config/prisma";
+
 export interface ChatMessage {
   role: string;
   content: string;
@@ -63,5 +65,18 @@ export const getRfp = async (sessionId: string): Promise<RFP | null> => {
   } catch (error) {
     console.error("Error getting chat history:", error);
     return null;
+  }
+};
+
+export const checkSession = async (sessionId: string) => {
+  try {
+    const chatSession = await prisma.chatSession.findUnique({
+      where: { id: sessionId },
+    });
+
+    return !!chatSession;
+  } catch (error) {
+    console.error("Error checking session:", error);
+    return false;
   }
 };

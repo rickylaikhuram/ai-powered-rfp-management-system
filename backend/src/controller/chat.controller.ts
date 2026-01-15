@@ -7,7 +7,6 @@ import {
   getRfp,
   RFP,
 } from "../services/chat.services";
-import { UpdateData } from "../types/chat";
 import { sendRfp } from "../services/email.services";
 
 export const getPreviousChat = async (req: Request, res: Response) => {
@@ -24,6 +23,7 @@ export const getPreviousChat = async (req: Request, res: Response) => {
             description: true,
             createdAt: true,
             status: true,
+            proposals: true,
           },
         },
         messages: {
@@ -212,7 +212,7 @@ export const chatHistory = async (req: Request, res: Response) => {
   }
 };
 
-export const finalizedRfp = async (req: Request, res: Response) => {
+export const finalizedRfpAndSendMail = async (req: Request, res: Response) => {
   try {
     let { sessionId, isChanged, title, description, vendorIds } = req.body;
 
@@ -306,31 +306,6 @@ export const getVendors = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       vendors: vendors ?? [],
-    });
-  } catch (error) {
-    console.error("Error in get vendors:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
-};
-
-// add vendors to send mail
-export const addVendorsToSendMail = async (req: Request, res: Response) => {
-  try {
-    const { vendors, sessionId } = req.body;
-    const vedors = await prisma.vendor.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    });
-
-    return res.status(200).json({
-      success: true,
-      vedors: vedors ?? [],
     });
   } catch (error) {
     console.error("Error in get vendors:", error);

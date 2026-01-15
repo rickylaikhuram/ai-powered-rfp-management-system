@@ -2,7 +2,7 @@ import { Response, NextFunction, Request } from "express";
 import { finalizedRfpSchema, inputSchema, paramsSchema } from "../lib/zod";
 import z from "zod";
 
-// Middleware: start interacting with ai if data exist in the body
+// check if input data exist or not
 export const validateRfpInput = (
   req: Request,
   res: Response,
