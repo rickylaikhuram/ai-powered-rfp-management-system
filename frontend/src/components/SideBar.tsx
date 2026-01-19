@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import ChatHistory from "./ChatHistory";
 import instance from "../lib/axios";
 
@@ -18,10 +18,10 @@ const Sidebar = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<null | string>(null);
   const navigate = useNavigate();
-
+  const { id } = useParams();
   useEffect(() => {
     fetchChatHistory();
-  }, []);
+  }, [id]);
 
   const fetchChatHistory = async () => {
     try {
